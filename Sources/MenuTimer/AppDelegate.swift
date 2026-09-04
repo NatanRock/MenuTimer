@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let engine = TimerEngine()
     private let blink = BlinkController()
     private let store = SessionStore.shared
+    private let presetsEditor = PresetsEditor()
     private lazy var pomodoro = PomodoroController(engine: engine)
 
     private let statusFont = NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .regular)
@@ -51,7 +52,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         if engine.isPaused {
-            setTitle(button, "❙❙ " + TimeFormat.short(engine.remaining), color: .tertiaryLabelColor)
+            // Оранжевый, а не серый: серый сливался с меню-баром и пауза
+            // читалась как выключенный таймер.
+            setTitle(button, "❙❙ " + TimeFormat.short(engine.remaining), color: .systemOrange)
             return
         }
 
@@ -440,34 +443,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func editPresets() {
-        let current = Settings.presets
-            .map { preset -> String in
-                let trimmed = preset.title.trimmingCharacters(in: .whitespaces)
-                let duration = TimeFormat.short(TimeInterval(preset.seconds))
-                return trimmed.isEmpty ? duration : "\(trimmed) | \(duration)"
-            }
-            .joined(separator: "\n")
-
-        guard let edited = promptMultiline(
-            title: "Пресеты",
-            message: "По одному в строке. Формат: «Игры | 1:00».\nИмя пресета — это имя задачи в статистике.\nПустой список вернёт значения по умолчанию.",
-            defaultValue: current
-        ) else { return }
-
-        var parsed: [Preset] = []
-        for rawLine in edited.split(separator: "\n") {
-            let line = rawLine.trimmingCharacters(in: .whitespaces)
-            guard !line.isEmpty else { continue }
-            let parts = line.split(separator: "|", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
-            let title = parts.count == 2 ? parts[0] : ""
-            let durationText = parts.count == 2 ? parts[1] : parts[0]
-            guard let seconds = TimeFormat.parse(durationText) else {
-                showError("Не удалось разобрать строку «\(line)».")
-                return
-            }
-            parsed.append(Preset(title: title, seconds: seconds))
-        }
-        Settings.presets = parsed.isEmpty ? Settings.defaultPresets : parsed
+        presetsEditor.show()
     }
 
     @objc private func toggleLoginItem() {
@@ -547,31 +523,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         field.alignment = .right
         field.textColor = .secondaryLabelColor
         return field
-    }
-
-    private func promptMultiline(title: String, message: String, defaultValue: String) -> String? {
-        NSApp.activate(ignoringOtherApps: true)
-        let alert = NSAlert()
-        alert.messageText = title
-        alert.informativeText = message
-        alert.addButton(withTitle: "Сохранить")
-        alert.addButton(withTitle: "Отмена")
-
-        let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: 300, height: 130))
-        textView.isRichText = false
-        textView.isAutomaticQuoteSubstitutionEnabled = false
-        textView.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
-        textView.string = defaultValue
-
-        let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: 300, height: 130))
-        scroll.documentView = textView
-        scroll.hasVerticalScroller = true
-        scroll.borderType = .bezelBorder
-        alert.accessoryView = scroll
-        alert.window.initialFirstResponder = textView
-
-        guard alert.runModal() == .alertFirstButtonReturn else { return nil }
-        return textView.string
     }
 
     private func confirm(title: String, message: String, confirmTitle: String) -> Bool {
