@@ -1,7 +1,8 @@
 import Foundation
 
-/// Обёртка над UserDefaults. Длительности Pomodoro хранятся в секундах,
-/// чтобы их можно было менять руками для проверки:
+/// Обёртка над UserDefaults. Здесь живут только настройки — журнал сессий
+/// отдельно, в SessionStore. Длительности хранятся в секундах, чтобы их можно
+/// было менять руками для проверки:
 ///   defaults write com.local.menutimer pomodoroWorkSeconds -int 10
 enum Settings {
 
@@ -14,14 +15,15 @@ enum Settings {
         static let longBreak = "pomodoroLongBreakSeconds"
         static let longBreakEvery = "pomodoroLongBreakEvery"
         static let blinkMax = "blinkMaxSeconds"
-        static let history = "dayHistory"
+        static let overtimeLimit = "overtimeLimitSeconds"
+        static let lastTask = "lastPomodoroTask"
     }
 
     static let defaultPresets: [Preset] = [
-        Preset(title: "", seconds: 5 * 60),
-        Preset(title: "", seconds: 10 * 60),
-        Preset(title: "", seconds: 25 * 60),
-        Preset(title: "", seconds: 60 * 60)
+        Preset(title: "Работа", seconds: 25 * 60),
+        Preset(title: "Чтение", seconds: 30 * 60),
+        Preset(title: "Игры", seconds: 60 * 60),
+        Preset(title: "Отдых", seconds: 10 * 60)
     ]
 
     static func registerDefaults() {
@@ -30,7 +32,10 @@ enum Settings {
             Key.shortBreak: 5 * 60,
             Key.longBreak: 15 * 60,
             Key.longBreakEvery: 4,
-            Key.blinkMax: 600
+            Key.blinkMax: 600,
+            // Овертайм не бесконечен: если про таймер забыли и ушли спать, он
+            // сам закроет сессию, а не запишет в статистику всю ночь.
+            Key.overtimeLimit: 2 * 3600
         ])
     }
 
@@ -72,52 +77,22 @@ enum Settings {
         TimeInterval(max(1, defaults.integer(forKey: Key.blinkMax)))
     }
 
-    // MARK: - История по дням
+    static var overtimeLimitSeconds: TimeInterval {
+        get { TimeInterval(max(60, defaults.integer(forKey: Key.overtimeLimit))) }
+        set { defaults.set(max(60, Int(newValue)), forKey: Key.overtimeLimit) }
+    }
 
-    static var history: [String: DayStat] {
+    /// Задача последнего помидора — чтобы «Начать помидор» стартовал в один клик,
+    /// а не спрашивал название каждый раз.
+    static var lastPomodoroTask: String {
         get {
-            guard let data = defaults.data(forKey: Key.history),
-                  let decoded = try? JSONDecoder().decode([String: DayStat].self, from: data)
-            else { return [:] }
-            return decoded
+            let stored = (defaults.string(forKey: Key.lastTask) ?? "").trimmingCharacters(in: .whitespaces)
+            return stored.isEmpty ? "Работа" : stored
         }
         set {
-            guard let data = try? JSONEncoder().encode(newValue) else { return }
-            defaults.set(data, forKey: Key.history)
+            let trimmed = newValue.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty else { return }
+            defaults.set(trimmed, forKey: Key.lastTask)
         }
-    }
-
-    /// Помидоров за сегодня. Смена суток обрабатывается сама — ключ другой.
-    static var completedToday: Int {
-        history[StatsKey.key(for: Date())]?.pomodoros ?? 0
-    }
-
-    /// Единственная точка записи статистики.
-    static func record(pomodoro: Bool, focusedSeconds: Int) {
-        var updated = pruned(history)
-        let key = StatsKey.key(for: Date())
-        var day = updated[key] ?? DayStat()
-        if pomodoro { day.pomodoros += 1 }
-        day.focusedSeconds += max(0, focusedSeconds)
-        updated[key] = day
-        history = updated
-    }
-
-    /// Обнуляет сегодняшний день целиком (пункт «Сбросить счётчик и цикл»).
-    static func resetToday() {
-        var updated = history
-        updated.removeValue(forKey: StatsKey.key(for: Date()))
-        history = updated
-    }
-
-    static func clearHistory() {
-        history = [:]
-    }
-
-    /// Дни старше 90 суток выкидываем, чтобы словарь не рос бесконечно.
-    private static func pruned(_ history: [String: DayStat]) -> [String: DayStat] {
-        guard let cutoff = Calendar.current.date(byAdding: .day, value: -90, to: Date()) else { return history }
-        let cutoffKey = StatsKey.key(for: cutoff)
-        return history.filter { $0.key >= cutoffKey }
     }
 }

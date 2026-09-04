@@ -34,9 +34,11 @@ enum TimeFormat {
         return String(format: "%02d:%02d", minutes, seconds)
     }
 
-    /// H:MM для статистики: 6000 -> "1:40".
+    /// H:MM для статистики: 6000 -> "1:40". Отрезки короче минуты показываем в
+    /// секундах — иначе они выглядят как «0:00», то есть как отсутствие времени.
     static func hoursMinutes(_ seconds: Int) -> String {
-        String(format: "%d:%02d", seconds / 3600, (seconds % 3600) / 60)
+        if seconds < 60 { return "\(max(0, seconds))с" }
+        return String(format: "%d:%02d", seconds / 3600, (seconds % 3600) / 60)
     }
 
     /// Разбирает "25", "25:00", "1:30:00", "10с", "10s".

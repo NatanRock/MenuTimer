@@ -20,6 +20,13 @@ enum PomodoroPhase {
         case .longBreak: return Settings.longBreakSeconds
         }
     }
+
+    var isWork: Bool {
+        if case .work = self { return true }
+        return false
+    }
+
+    var kind: SessionKind { isWork ? .pomodoro : .rest }
 }
 
 /// Циклы работа/перерыв поверх TimerEngine.
@@ -31,6 +38,9 @@ final class PomodoroController {
 
     private(set) var currentPhase: PomodoroPhase?
     private(set) var pendingPhase: PomodoroPhase?
+    /// Задача, над которой идёт цикл. Перерывы пишутся под своим именем, а сюда
+    /// возвращаются на следующей рабочей фазе.
+    private(set) var task: String = Settings.lastPomodoroTask
     private var completedWorkSessions = 0
 
     init(engine: TimerEngine) {
@@ -39,10 +49,18 @@ final class PomodoroController {
 
     var isEngaged: Bool { currentPhase != nil || pendingPhase != nil }
 
-    func start(_ phase: PomodoroPhase) {
+    func start(_ phase: PomodoroPhase, task: String? = nil) {
+        if let task {
+            self.task = StatsAggregate.displayName(task)
+            Settings.lastPomodoroTask = self.task
+        }
         currentPhase = phase
         pendingPhase = nil
-        engine.start(duration: TimeInterval(phase.seconds), label: phase.title)
+        engine.start(
+            task: phase.isWork ? self.task : phase.title,
+            duration: TimeInterval(phase.seconds),
+            kind: phase.kind
+        )
     }
 
     func startPending() {
@@ -50,14 +68,13 @@ final class PomodoroController {
         start(phase)
     }
 
-    /// Вызывается, когда движок досчитал до нуля.
+    /// Вызывается, когда движок перешагнул ноль. Статистику здесь не пишем —
+    /// сессия ещё идёт в овертайме, её закроет AppDelegate.
     func handleFinish() {
         guard let phase = currentPhase else { return }
-        currentPhase = nil
 
         switch phase {
         case .work:
-            Settings.record(pomodoro: true, focusedSeconds: phase.seconds)
             completedWorkSessions += 1
             let isLong = completedWorkSessions % Settings.longBreakEvery == 0
             pendingPhase = isLong ? .longBreak : .shortBreak
