@@ -43,6 +43,10 @@ defaults write com.local.menutimer blinkMaxSeconds -int 5
 
 - **`Settings`** — тонкая обёртка над `UserDefaults` (только настройки; журнал сессий — отдельно в `SessionStore`). **`Presets`/`TimeFormat`/`StatsFormat`** — модель пресета и форматирование строк.
 
+## Коммиты
+
+Сообщения коммитов — по **Conventional Commits** (`feat:`, `fix:`, `docs:`, `chore:`, `refactor:`…), описание на русском в повелительном наклонении («добавить», а не «добавлено»). Правила и формат заданы в skill `git-commit` (`.agents/skills/git-commit/SKILL.md`, подключён в Claude Code симлинком `.claude/skills/git-commit`); при коммите используй его. Один логический набор изменений — один коммит.
+
 ## Публикация
 
 Код на GitHub: `https://github.com/NatanRock/MenuTimer` (remote `origin` по HTTPS, пуш через токен `gh`). SSH-ключ на машине не настроен — не переключать origin на SSH. Артефакты (`.build/`, `build/`, `*.app`) в `.gitignore` и не коммитятся.
